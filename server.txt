@@ -1,0 +1,76 @@
+#include <winsock2.h>
+#include <iostream>
+#include <string>
+#include <thread>
+#include <vector>
+
+#pragma comment(lib, "ws2_32.lib")
+
+#define PORT 8080
+#define BUFFER_SIZE 1024
+
+void handleClient(SOCKET clientSocket, int clientId) {
+    char buffer[BUFFER_SIZE];
+    while (true) {
+        memset(buffer, 0, BUFFER_SIZE);
+        int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE, 0);
+        if (bytesReceived <= 0) {
+            std::cout << "Client " << clientId << " disconnected." << std::endl;
+            break;
+        }
+        std::cout << "Received from client " << clientId << ": " << buffer << std::endl;
+
+        // Send response to client
+        send(clientSocket, buffer, bytesReceived, 0);
+    }
+
+    // Close socket for this client
+    closesocket(clientSocket);
+}
+
+int main() {
+    WSADATA wsaData;
+    SOCKET serverSocket;
+    sockaddr_in serverAddr;
+
+    // Initialize WinSock
+    WSAStartup(MAKEWORD(2, 2), &wsaData);
+
+    // Create socket
+    serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_addr.s_addr = INADDR_ANY; // Accept connections on any interface
+    serverAddr.sin_port = htons(PORT);
+
+    // Bind socket to address
+    bind(serverSocket, (sockaddr*)&serverAddr, sizeof(serverAddr));
+
+    // Listen for incoming connections
+    listen(serverSocket, SOMAXCONN);
+
+    std::cout << "Server started. Waiting for connections..." << std::endl;
+
+    int clientId = 0;
+    std::vector<std::thread> threads;
+
+    while (true) {
+        SOCKET clientSocket;
+        sockaddr_in clientAddr;
+        int clientAddrSize = sizeof(clientAddr);
+
+        // Accept incoming connection
+        clientSocket = accept(serverSocket, (sockaddr*)&clientAddr, &clientAddrSize);
+        if (clientSocket != INVALID_SOCKET) {
+            std::cout << "Client " << ++clientId << " connected." << std::endl;
+
+            // Create a new thread to handle the client
+            threads.emplace_back(handleClient, clientSocket, clientId);
+        }
+    }
+
+    // Close the server socket and clean up
+    closesocket(serverSocket);
+    WSACleanup();
+
+    return 0;
+}
